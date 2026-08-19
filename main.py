@@ -1,45 +1,45 @@
 from PIL import Image, ImageDraw, ImageFont
 from gtts import gTTS
-from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips
-import os
+import subprocess
 
 W, H = 1080, 1920
 
-def make_hd(t1, t2, filename):
-    img = Image.new('RGB', (W, H), (8, 10, 30))
+def make_img(top, main, file):
+    img = Image.new('RGB', (W, H), (12, 12, 35))
     draw = ImageDraw.Draw(img)
     for y in range(H):
-        r = int(8 + y*0.05)
-        b = int(30 + y*0.1)
-        draw.line([(0,y),(W,y)], fill=(r,10,b))
+        draw.line([(0,y),(W,y)], fill=(12, 12, 35 + y//20))
     try:
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 70)
-        font_small = ImageFont.truetype("DejaVuSans.ttf", 48)
+        f1 = ImageFont.truetype("DejaVuSans-Bold.ttf", 68)
+        f2 = ImageFont.truetype("DejaVuSans.ttf", 46)
     except:
-        font = ImageFont.load_default()
-        font_small = font
-    draw.text((W//2, 700), t1, font=font, fill=(255,255,255), anchor="mm", stroke_width=2, stroke_fill=(0,0,0))
-    draw.text((W//2, 1050), t2, font=font_small, fill=(230,230,255), anchor="mm", align="center")
-    img.save(filename, quality=95, dpi=(300,300))
-    print(f"Made {filename}")
+        f1 = ImageFont.load_default()
+        f2 = f1
+    draw.text((W//2, 650), top, font=f1, fill="white", anchor="mm")
+    draw.text((W//2, 950), main, font=f2, fill="#E6E6FF", anchor="mm", align="center")
+    img.save(file, quality=95)
+    print(f"Made {file}")
 
-# 1. MAKE VOICE FIRST
-print("Making voice...")
-gTTS(text="Lord, why am I suffering?", lang='en', slow=False).save("voice1.mp3")
-gTTS(text="I am preparing you for something greater, my child.", lang='en', slow=False).save("voice2.mp3")
+# TRY VOICE - if fails, still make video
+try:
+    print("Generating AI voice...")
+    gTTS(text="Lord, why am I suffering?", lang='en').save("v1.mp3")
+    gTTS(text="I am preparing you for something greater, my child.", lang='en').save("v2.mp3")
+    HAS_VOICE = True
+    print("Voice OK")
+except Exception as e:
+    print(f"Voice failed {e} - making silent HD video")
+    HAS_VOICE = False
 
-# 2. MAKE IMAGES
-make_hd("The Disciple Asked:", '"Lord, why am I suffering?"', "scene1.jpg")
-make_hd("Jesus Replied:", '"I am preparing you\nfor something greater"', "scene2.jpg")
+make_img("The Disciple Asked:", '"Lord, why am I suffering?"', "s1.jpg")
+make_img("Jesus Replied:", '"I am preparing you\nfor something greater"', "s2.jpg")
 
-# 3. MAKE VIDEO WITH VOICE SYNCED
-print("Making video with voice...")
-audio1 = AudioFileClip("voice1.mp3")
-audio2 = AudioFileClip("voice2.mp3")
+if HAS_VOICE:
+    for img, aud, out in [("s1.jpg","v1.mp3","c1.mp4"), ("s2.jpg","v2.mp3","c2.mp4")]:
+        subprocess.run(["ffmpeg","-y","-loop","1","-i",img,"-i",aud,"-c:v","libx264","-c:a","aac","-shortest","-vf","scale=1080:1920,format=yuv420p","-r","30",out], check=True)
+    open("list.txt","w").write("file 'c1.mp4'\nfile 'c2.mp4'\n")
+    subprocess.run(["ffmpeg","-y","-f","concat","-safe","0","-i","list.txt","-c","copy","final_video.mp4"], check=True)
+else:
+    subprocess.run(["ffmpeg","-y","-loop","1","-t","3","-i","s1.jpg","-loop","1","-t","3","-i","s2.jpg","-filter_complex","[0:v][1:v]concat=n=2:v=1:a=0,scale=1080:1920,format=yuv420p[v]","-map","[v]","-r","30","final_video.mp4"], check=True)
 
-clip1 = ImageClip("scene1.jpg").set_duration(audio1.duration + 0.8).set_audio(audio1)
-clip2 = ImageClip("scene2.jpg").set_duration(audio2.duration + 0.8).set_audio(audio2)
-
-final = concatenate_videoclips([clip1, clip2], method="compose")
-final.write_videofile("final_video.mp4", fps=24, codec='libx264', audio_codec='aac', bitrate="5000k")
-print("DONE - VIDEO WITH VOICE READY!")
+print("DONE!")
